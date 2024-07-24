@@ -16,6 +16,8 @@
             4. Creates Event Hub namespaces (Standard) by dividing #1 tables by 10.
             5. Creates data export rules via Azure REST API on Log Analytics workspace.
             6. Creates data connection rules in Azure Data Explorer (ADX) database.
+
+    *** /// THIS SCRIPT HAS BEEN MODIFIED TO WORK IN MICROSOFT AZURE GOVERNMENT ENVIRONMENTS /// ***
     
     .PARAMETER LogAnalyticsWorkSpaceName
         Enter the Log Analytics workspace name (required)
@@ -34,11 +36,12 @@
 
     .NOTES
         AUTHOR: Sreedhar Ande
-        LASTEDIT: 14 July 2021
+        Last Edit by: Chhorn Lim & Sani Sheikh
+        LASTEDIT: 24 July 2024
 
     .EXAMPLE
         .\Migrate-LA-to-ADX.ps1 -LogAnalyticsResourceGroup la-resgrp1 -LogAnalyticsWorkspaceName la-workspace-1 `
-        -AdxResourceGroup adx-resgrp1 -AdxClusterURL "https://adxcluster1.eastus2.kusto.windows.net" -AdxDBName AdxClusterDb1
+        -AdxResourceGroup adx-resgrp1 -AdxClusterURL "https://adxcluster1.usgovvirginia.kusto.usgovcloudapi.net" -AdxDBName AdxClusterDb1
 #>
 
 #region UserInputs
@@ -411,18 +414,18 @@ function New-EventHubNamespace {
                 $EventHubsArray += $EventHubNamespaceName
                 
                 Write-Verbose "Executing: New-AzEventHubNamespace -ResourceGroupName $LogAnalyticsResourceGroup -NamespaceName $EventHubNamespaceName `
-                -Location $LogAnalyticsLocation -SkuName Standard -SkuCapacity 12 -EnableAutoInflate -MaximumThroughputUnits 20"																																	   
+                -Location $LogAnalyticsLocation -SkuName Standard -SkuCapacity 10 -MaximumThroughputUnits 18"																																	   
                 
                 try {                    
                     Write-Log -Message "Create a new Event Hub Namespace:$EventHubNamespaceName in resource group:$LogAnalyticsResourceGroup" -LogFileName $LogFileName -Severity Information
-                    Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true"
+                    #Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true"
                     $ResultEventHubNS = New-AzEventHubNamespace -ResourceGroupName $LogAnalyticsResourceGroup `
-                        -NamespaceName $EventHubNamespaceName `
+                        -Name $EventHubNamespaceName `
                         -Location $LogAnalyticsLocation `
-                        -SkuName "Standard" `
-                        -SkuCapacity 12 `
+                        -SkuName Standard `
                         -EnableAutoInflate `
-                        -MaximumThroughputUnits 20                                                            
+                        -SkuCapacity 1 `
+                        -MaximumThroughputUnit 2                                                            
                     
                     if ($ResultEventHubNS.ProvisioningState.Trim().ToLower() -eq "succeeded") {                        
                         Write-Log -Message "$EventHubNamespaceName created successfully" -LogFileName $LogFileName -Severity Information
@@ -479,7 +482,7 @@ function New-LaDataExportRule {
             if ($EventHubNameSpace.ProvisioningState -eq "Succeeded") {
                 $RandomNumber = Get-Random
                 $LaDataExportRuleName = "$($LogAnalyticsWorkspaceName)-$($RandomNumber)"
-                $DataExportAPI = "https://management.azure.com/subscriptions/$SubscriptionId/resourcegroups/$LogAnalyticsResourceGroup/providers/Microsoft.operationalInsights/workspaces/$LogAnalyticsWorkspaceName/dataexports/$laDataExportRuleName" + "?api-version=2020-08-01"
+                $DataExportAPI = "https://management.usgovcloudapi.net/subscriptions/$SubscriptionId/resourcegroups/$LogAnalyticsResourceGroup/providers/Microsoft.operationalInsights/workspaces/$LogAnalyticsWorkspaceName/dataexports/$laDataExportRuleName" + "?api-version=2020-08-01"
             
                 $AzureAccessToken = (Get-AzAccessToken).Token            
                 $LaAPIHeaders = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
@@ -550,7 +553,7 @@ function New-ADXDataConnectionRules {
                         $AdxTableRawMapping = "$($AdxTableRealName)RawMapping"
                         $DataConnName = "dc-$($TableEventHubTopic)"
 
-                        $DataConnAPI = "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$ADXResourceGroup/providers/Microsoft.Kusto/clusters/$ADXClusterName/databases/$ADXDBName/dataConnections/$dataConnName" + "?api-version=2021-01-01"
+                        $DataConnAPI = "https://management.usgovcloudapi.net/subscriptions/$SubscriptionId/resourceGroups/$ADXResourceGroup/providers/Microsoft.Kusto/clusters/$ADXClusterName/databases/$ADXDBName/dataConnections/$dataConnName" + "?api-version=2021-01-01"
             
                         $AzureAccessToken = (Get-AzAccessToken).Token            
                         $DataConnAPIHeaders = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
@@ -627,14 +630,16 @@ Write-Host "`n > Azure Log Analytics workspace 'Read' permissions on: $($LogAnal
 
 Read-Host -Prompt "Press enter to continue or CTRL+C to exit the script."
 
-$Context = Get-AzContext
+#$Context = Get-AzContext
 
 if (!$Context) {
-    Connect-AzAccount
+    Set-Azconfig -EnableLoginByWam 0
+    Connect-AzAccount -Environment AzureUSGovernment
     $Context = Get-AzContext
 }
 
 $SubscriptionId = $Context.Subscription.Id
+
 
 Write-Verbose "Executing: Get-AzOperationalInsightsWorkspace -Name $LogAnalyticsWorkspaceName -ResourceGroupName $LogAnalyticsResourceGroup -DefaultProfile $context"
 
@@ -727,7 +732,7 @@ if ($CreateOrUpdateQuestionDecision -eq 1) {
 
     $DataConnectionQuestionDecision = $Host.UI.PromptForChoice($title, $DataConnectionQuestion, $DataConnectionQuestionChoices, 0)
     if ($DataConnectionQuestionDecision -eq 0) {
-        Start-SleepMessage -Seconds 1800 -waitMessage "Provisioning Event Hub topics for Log Analytics tables"                    
+        Start-SleepMessage -Seconds 3600 -waitMessage "Provisioning Event Hub topics for Log Analytics tables"                    
         New-ADXDataConnectionRules -AdxEventHubs $EventHubsForADX
     }
     else {            
