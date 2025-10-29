@@ -47,7 +47,6 @@
             "timeContext": {
               "durationMs": 0
             },
-            "timeContextFromParameter": "CAPTime",
             "queryType": 1,
             "resourceType": "microsoft.resourcegraph/resources"
           },
@@ -22481,3 +22480,4 @@
   "fromTemplateId": "sentinel-DoDZeroTrust",
   "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
 }
+
